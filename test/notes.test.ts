@@ -31,6 +31,41 @@ describe("notes", () => {
   });
 });
 
+describe("colored list", () => {
+  const GRAY = (s: string) => `\x1b[90m${s}\x1b[39m`;
+  const GREEN = (s: string) => `\x1b[32m${s}\x1b[39m`;
+
+  it("wraps id in gray and text in green", () => {
+    const notes = addNote([], "milk", DAY);
+    expect(formatList(notes, true)).toBe(`${GRAY("1")}. ${GREEN("milk")} (2026-11-06)`);
+  });
+
+  it("stays plain by default and when color is false", () => {
+    const notes = addNote([], "milk", DAY);
+    expect(formatList(notes)).toBe("1. milk (2026-11-06)");
+    expect(formatList(notes, false)).toBe("1. milk (2026-11-06)");
+  });
+
+  it("does not color the empty message", () => {
+    expect(formatList([], true)).toBe("No notes yet.");
+  });
+
+  it("colors every line", () => {
+    const notes = addNote(addNote([], "a", DAY), "b", DAY);
+    expect(formatList(notes, true).split("\n")).toEqual([
+      `${GRAY("1")}. ${GREEN("a")} (2026-11-06)`,
+      `${GRAY("2")}. ${GREEN("b")} (2026-11-06)`,
+    ]);
+  });
+
+  it("run list honors the color flag", () => {
+    const file = tmpFile();
+    run(["add", "milk"], file, DAY);
+    expect(run(["list"], file, DAY, true).out).toBe(`${GRAY("1")}. ${GREEN("milk")} (2026-11-06)`);
+    expect(run(["list"], file, DAY).out).toBe("1. milk (2026-11-06)");
+  });
+});
+
 describe("cli", () => {
   it("adds and lists notes in the file", () => {
     const file = tmpFile();
