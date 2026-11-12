@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { run } from "../src/cli.ts";
-import { addNote, deleteNote, formatList, NotesError, type Note } from "../src/notes.ts";
+import { readFileSync } from "node:fs";
+import { addNote, deleteNote, formatList, NotesError, searchNotes, type Note } from "../src/notes.ts";
 
 const DAY = "2026-11-06";
 const tmpFile = () => join(mkdtempSync(join(tmpdir(), "notes-")), "notes.json");
@@ -53,6 +54,60 @@ describe("cli", () => {
   });
 
   it("prints usage for unknown commands", () => {
-    expect(run(["fly"], tmpFile(), DAY).code).toBe(2);
+    const res = run(["fly"], tmpFile(), DAY);
+    expect(res.code).toBe(2);
+    expect(res.out).toContain("search");
+  });
+});
+
+const seeded = () => {
+  const file = tmpFile();
+  for (const t of ["buy milk", "call Bob", "Milkshake recipe"]) run(["add", t], file, DAY);
+  return file;
+};
+
+describe("search", () => {
+  const notes = ["milk", "buy Milk", "eggs"].reduce((acc, t) => addNote(acc, t, DAY), [] as Note[]);
+
+  it("returns only matching notes, ignoring case", () => {
+    expect(searchNotes(notes, "MILK").map((n) => n.text)).toEqual(["milk", "buy Milk"]);
+    expect(searchNotes(notes, "eggs")).toHaveLength(1);
+  });
+
+  it("returns [] when nothing matches and keeps ids", () => {
+    expect(searchNotes(notes, "zzz")).toEqual([]);
+    expect(searchNotes(notes, "milk").map((n) => n.id)).toEqual([1, 2]);
+  });
+
+  it("refuses a blank query", () => {
+    expect(() => searchNotes(notes, "   ")).toThrow(NotesError);
+  });
+
+  it("cli prints matching lines in list format", () => {
+    expect(run(["search", "milk"], seeded(), DAY)).toEqual({
+      code: 0,
+      out: "1. buy milk (2026-11-06)\n3. Milkshake recipe (2026-11-06)",
+    });
+  });
+
+  it("cli prints a message when nothing matches", () => {
+    expect(run(["search", "zzz"], seeded(), DAY)).toEqual({ code: 0, out: "No matching notes." });
+  });
+
+  it("cli joins multi-word queries", () => {
+    expect(run(["search", "buy", "milk"], seeded(), DAY).out).toBe("1. buy milk (2026-11-06)");
+  });
+
+  it("cli errors without text", () => {
+    const res = run(["search"], seeded(), DAY);
+    expect(res.code).toBe(1);
+    expect(res.out).toContain("error:");
+  });
+
+  it("cli does not modify the file", () => {
+    const file = seeded();
+    const before = readFileSync(file, "utf8");
+    run(["search", "milk"], file, DAY);
+    expect(readFileSync(file, "utf8")).toBe(before);
   });
 });
